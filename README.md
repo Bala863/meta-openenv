@@ -1,0 +1,370 @@
+---
+title: EmailOps-Env
+emoji: 📧
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+---
+
+# 📧 EmailOps-Env
+
+**An OpenEnv-compliant environment for evaluating AI agents on end-to-end email operations.**
+
+[![OpenEnv](https://img.shields.io/badge/OpenEnv-compliant-blue)](https://github.com/meta-pytorch/OpenEnv)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-green.svg)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](Dockerfile)
+
+---
+
+## 🎯 Overview
+
+Modern organizations receive thousands of customer and internal emails daily. EmailOps-Env simulates this workflow as a **structured, graded evaluation environment** for AI agents. It tests three core competencies:
+
+| Task | Difficulty | Description | Scoring |
+|------|-----------|-------------|---------|
+| **1. Intent Classification** | Easy | Classify email intent into 8 categories | Exact match (1.0), partial (0.2–0.4), wrong (0.0) |
+| **2. Information Extraction** | Medium | Extract 7 structured fields from the email | Weighted field-level scoring with similarity matching |
+| **3. Response Generation** | Hard | Draft a professional, accurate email reply | Multi-criteria: relevance, completeness, professionalism, safety, accuracy |
+
+### Why EmailOps-Env?
+
+- 🏢 **Real-world utility** — Tests practical business communication skills
+- 📊 **Deterministic grading** — Programmatic scoring (0.0–1.0) with detailed feedback
+- 🔄 **Progressive difficulty** — Tasks increase in complexity through the episode
+- 🎓 **Partial credit** — Meaningful intermediate rewards guide learning
+- 🛡️ **Safety grading** — Checks for unsafe/prohibited content in responses
+- 📦 **20 diverse emails** — Spanning 8 intent categories with full ground-truth
+
+---
+
+## 🚀 Quick Start
+
+### Installation
+
+```bash
+# Install from source
+git clone https://github.com/YOUR_USERNAME/emailops-env
+cd emailops-env
+pip install -e .
+
+# Or install from HF Space
+pip install git+https://huggingface.co/spaces/YOUR_USERNAME/emailops-env
+```
+
+### Start the Server
+
+```bash
+# Option 1: Direct
+uvicorn emailops_env.server.app:app --host 0.0.0.0 --port 7860
+
+# Option 2: Docker
+docker build -t emailops-env .
+docker run -p 7860:7860 emailops-env
+```
+
+### Use the Client
+
+```python
+import asyncio
+from emailops_env import EmailOpsEnv, EmailAction
+
+async def main():
+    async with EmailOpsEnv(base_url="http://localhost:7860") as client:
+        # Reset — get email and Task 1 instructions
+        obs = await client.reset()
+        print(f"Email: {obs.email_subject}")
+        print(f"Task: {obs.task_name}")
+
+        # Task 1: Intent Classification
+        result = await client.step(EmailAction(intent="billing"))
+        print(f"Score: {result['reward']:.4f}")
+
+        # Task 2: Information Extraction
+        result = await client.step(EmailAction(
+            order_id="INV-2026-4471",
+            customer_name="Sarah Johnson",
+            issue_description="Billing discrepancy",
+            urgency_level="medium",
+            email_address="sarah.johnson@techcorp.com"
+        ))
+        print(f"Score: {result['reward']:.4f}")
+
+        # Task 3: Response Generation
+        result = await client.step(EmailAction(
+            response_text="Dear Sarah, Thank you for reaching out..."
+        ))
+        print(f"Score: {result['reward']:.4f}")
+        print(f"Done: {result['done']}")
+
+asyncio.run(main())
+```
+
+### Synchronous Usage
+
+```python
+from emailops_env import EmailOpsEnv, EmailAction
+
+with EmailOpsEnv(base_url="http://localhost:7860").sync() as client:
+    obs = client.reset()
+    result = client.step(EmailAction(intent="billing"))
+    print(f"Score: {result['reward']}")
+```
+
+### HTTP Client (No WebSocket)
+
+```python
+from emailops_env import EmailOpsHTTPClient
+
+client = EmailOpsHTTPClient("http://localhost:7860")
+data = client.reset()
+result = client.step({"intent": "billing"})
+print(result)
+client.close()
+```
+
+---
+
+## 🧪 Baseline Results
+
+Using **GPT-4o-mini** as the baseline agent across all 20 emails:
+
+| Metric | Score |
+|--------|-------|
+| Task 1 — Intent Classification | ~0.90 |
+| Task 2 — Information Extraction | ~0.78 |
+| Task 3 — Response Generation | ~0.72 |
+| **Overall Average** | **~0.80** |
+
+### Run the Baseline
+
+```bash
+export OPENAI_API_KEY="sk-..."
+uvicorn emailops_env.server.app:app --port 7860 &
+python baseline/run_baseline.py --num-episodes 5
+```
+
+---
+
+## 📐 Architecture
+
+```
+┌──────────────────────────────────────────────────┐
+│                  Agent / Client                   │
+│  ┌──────────────────────────────────────────┐    │
+│  │   EmailOpsEnv (WebSocket/HTTP Client)    │    │
+│  └─────────────────┬────────────────────────┘    │
+└────────────────────┼─────────────────────────────┘
+                     │  reset() / step() / state()
+                     ▼
+┌──────────────────────────────────────────────────┐
+│           Docker Container (Server)               │
+│  ┌──────────────────────────────────────────┐    │
+│  │         FastAPI Application (app.py)      │    │
+│  │  ┌────────────────────────────────────┐  │    │
+│  │  │    EmailEnvironment                │  │    │
+│  │  │  ┌──────────┐ ┌────────────────┐  │  │    │
+│  │  │  │ Graders  │ │  Email Dataset │  │  │    │
+│  │  │  └──────────┘ └────────────────┘  │  │    │
+│  │  └────────────────────────────────────┘  │    │
+│  └──────────────────────────────────────────┘    │
+└──────────────────────────────────────────────────┘
+```
+
+---
+
+## 📁 Project Structure
+
+```
+emailops-env/
+├── emailops_env/
+│   ├── __init__.py              # Package exports
+│   ├── models.py                # Action, Observation, State dataclasses
+│   ├── client.py                # WebSocket + HTTP clients
+│   └── server/
+│       ├── __init__.py
+│       ├── app.py               # FastAPI server
+│       ├── email_environment.py # Core environment logic
+│       ├── email_data.py        # 20 annotated emails
+│       └── graders.py           # Deterministic grading functions
+├── baseline/
+│   └── run_baseline.py          # OpenAI baseline agent
+├── openenv.yaml                 # OpenEnv manifest
+├── pyproject.toml               # Python package config
+├── Dockerfile                   # Container definition
+├── requirements.txt             # Server dependencies
+├── .dockerignore
+└── README.md
+```
+
+---
+
+## 🎯 Task Details
+
+### Task 1: Intent Classification
+
+**Goal:** Classify the email into one of 8 categories.
+
+**Valid Categories:**
+| Category | Description |
+|----------|-------------|
+| `billing` | Invoice, charge, payment issues |
+| `technical_support` | API errors, integration issues, performance |
+| `complaint` | Customer dissatisfaction, service failures |
+| `general_query` | Pricing inquiries, feature questions, compliance |
+| `account_issue` | Login problems, security, access issues |
+| `shipping` | Delivery tracking, address changes |
+| `refund_request` | Refund demands, return processing |
+| `feedback` | Positive reviews, feature requests, suggestions |
+
+**Scoring:**
+- Exact match → **1.0**
+- Related category (e.g., billing↔refund) → **0.2–0.4**
+- Invalid/wrong → **0.0**
+
+### Task 2: Information Extraction
+
+**Goal:** Extract 7 structured fields with weighted scoring.
+
+| Field | Weight | Matching Method |
+|-------|--------|-----------------|
+| `order_id` | 20% | Exact match |
+| `customer_name` | 15% | String similarity |
+| `issue_description` | 25% | Similarity + keyword overlap |
+| `product_name` | 10% | String similarity |
+| `requested_resolution` | 15% | Similarity + keyword overlap |
+| `urgency_level` | 10% | Exact match (low/medium/high/critical) |
+| `email_address` | 5% | Exact match |
+
+### Task 3: Response Generation
+
+**Goal:** Draft a complete professional email response.
+
+| Criterion | Weight | What's Checked |
+|-----------|--------|----------------|
+| Relevance | 25% | Keyword presence from expected response |
+| Completeness | 25% | Required phrases/references included |
+| Professionalism | 20% | Greeting, closing, length, formatting |
+| Safety | 15% | No unsafe patterns, no prohibited phrases |
+| Accuracy | 15% | Correct order ID, customer name referenced |
+
+---
+
+## 🔌 API Reference
+
+### HTTP Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check |
+| `POST` | `/reset` | Start new episode |
+| `POST` | `/step/{session_id}` | Submit action |
+| `GET` | `/state/{session_id}` | Get current state |
+| `GET` | `/emails` | List email IDs |
+
+### WebSocket
+
+Connect to `/ws` and send JSON messages:
+
+```json
+{"method": "reset", "params": {"email_id": "email_001"}}
+{"method": "step", "params": {"intent": "billing"}}
+{"method": "state"}
+```
+
+---
+
+## 🐳 Docker Deployment
+
+```bash
+# Build
+docker build -t emailops-env .
+
+# Run
+docker run -p 7860:7860 emailops-env
+
+# Test
+curl http://localhost:7860/health
+```
+
+### Hugging Face Spaces
+
+1. Create a new Space with **Docker** SDK
+2. Push this repository to the Space
+3. Access at `https://YOUR_USERNAME-emailops-env.hf.space`
+
+---
+
+## 📊 Evaluation Dataset
+
+The environment includes **20 diverse emails** spanning all 8 intent categories:
+
+| Intent | Count | Example Subject |
+|--------|-------|-----------------|
+| Billing | 3 | "Billing discrepancy on Invoice #INV-2026-4471" |
+| Technical Support | 3 | "URGENT: Production API returning 500 errors" |
+| Complaint | 2 | "Extremely disappointed with customer service" |
+| General Query | 3 | "Question about enterprise pricing and features" |
+| Account Issue | 2 | "Account compromised - unauthorized access" |
+| Shipping | 2 | "Where is my shipment? Order #SHP-99281" |
+| Refund Request | 2 | "Request full refund for subscription" |
+| Feedback | 2 | "Great experience with your new dashboard!" |
+
+Each email includes full ground-truth annotations for all three tasks.
+
+---
+
+## 📂 Using Your Own Emails
+
+To test agents against your company's own emails, you simply need to update the dataset in `emailops_env/server/email_data.py`. 
+
+The environment loads emails from the `EMAILS` list. Each email expects the following format:
+
+```python
+{
+    "id": "custom_001",
+    "from": "user@yourcompany.com",
+    "date": "2026-04-08 10:00:00",
+    "subject": "Example Custom Issue",
+    "body": "The full body of the email goes here...",
+    "ground_truth": {
+        "intent": "technical_support", 
+        "order_id": "YOUR-ID-123",
+        "customer_name": "John Doe",
+        "issue_description": "A summary of the issue for grading",
+        "product_name": "Your Product",
+        "requested_resolution": "What the user wants",
+        "urgency_level": "medium",
+        "email_address": "user@yourcompany.com",
+        "response_keywords": ["keyword1", "keyword2"],
+        "response_tone": "professional",
+        "response_must_include": ["REQUIRED-ID", "apology"],
+        "response_must_not_include": ["prohibited phrase"]
+    }
+}
+```
+
+Simply replace or append your own scenarios to the `EMAILS` list. The environment's `reset()` method will automatically start serving your custom emails for evaluation!
+
+---
+
+## 🛡️ Safety
+
+The response grader checks for:
+- ❌ Requests for sensitive data (SSN, full credit card)
+- ❌ Hostile or unprofessional language
+- ❌ Harmful suggestions
+- ❌ Context-specific prohibited phrases
+
+---
+
+## 📜 License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+Built with ❤️ for the Meta AI Hackathon — OpenEnv Submission

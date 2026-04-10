@@ -1,0 +1,112 @@
+# EmailOps-Env – OpenEnv manifest
+name: "emailops-env"
+version: "1.0.0"
+description: >
+  An OpenEnv-compliant environment that evaluates AI agents on end-to-end
+  email operations: intent classification, information extraction, and
+  professional response generation.
+
+author: "EmailOps Team"
+license: "MIT"
+
+# ── Tasks ──────────────────────────────────────────────────────────────────
+tasks:
+  - id: 1
+    name: "Intent Classification"
+    difficulty: "easy"
+    description: >
+      Classify the email into one of 8 categories: billing, technical_support,
+      complaint, general_query, account_issue, shipping, refund_request, feedback.
+    scoring: "Exact match = 1.0, related intent = 0.2–0.4, wrong/invalid = 0.0"
+
+  - id: 2
+    name: "Information Extraction"
+    difficulty: "medium"
+    description: >
+      Extract structured fields: order_id, customer_name, issue_description,
+      product_name, requested_resolution, urgency_level, email_address.
+    scoring: "Weighted field-level scoring using string similarity and keyword overlap"
+
+  - id: 3
+    name: "Full Response Generation"
+    difficulty: "hard"
+    description: >
+      Generate a complete professional email reply that is relevant, complete,
+      professional, safe, and accurate.
+    scoring: "Multi-criteria: relevance (0.25), completeness (0.25), professionalism (0.20), safety (0.15), accuracy (0.15)"
+
+# ── Action / Observation Space ─────────────────────────────────────────────
+action_space:
+  type: "structured"
+  fields:
+    - name: "intent"
+      type: "string"
+      description: "Email intent category (Task 1)"
+    - name: "order_id"
+      type: "string"
+      description: "Extracted order/account ID (Task 2)"
+    - name: "customer_name"
+      type: "string"
+      description: "Extracted customer name (Task 2)"
+    - name: "issue_description"
+      type: "string"
+      description: "Description of the issue (Task 2)"
+    - name: "product_name"
+      type: "string"
+      description: "Product mentioned in email (Task 2)"
+    - name: "requested_resolution"
+      type: "string"
+      description: "What the customer wants (Task 2)"
+    - name: "urgency_level"
+      type: "string"
+      description: "low/medium/high/critical (Task 2)"
+    - name: "email_address"
+      type: "string"
+      description: "Customer email address (Task 2)"
+    - name: "response_text"
+      type: "string"
+      description: "Full email response (Task 3)"
+
+observation_space:
+  type: "structured"
+  fields:
+    - name: "email_subject"
+      type: "string"
+    - name: "email_body"
+      type: "string"
+    - name: "email_from"
+      type: "string"
+    - name: "email_date"
+      type: "string"
+    - name: "task_id"
+      type: "integer"
+    - name: "task_name"
+      type: "string"
+    - name: "task_instruction"
+      type: "string"
+    - name: "score"
+      type: "float"
+    - name: "feedback"
+      type: "string"
+    - name: "done"
+      type: "boolean"
+
+# ── Deployment ─────────────────────────────────────────────────────────────
+hardware:
+  tier: "cpu-basic"
+  vCPU: 2
+  RAM: "4GB"
+
+server:
+  entrypoint: "emailops_env/server/app.py"
+  port: 7860
+  host: "0.0.0.0"
+
+docker:
+  dockerfile: "Dockerfile"
+  context: "."
+
+dataset:
+  emails: 20
+  categories: 8
+  difficulty_levels: ["easy", "medium", "hard"]

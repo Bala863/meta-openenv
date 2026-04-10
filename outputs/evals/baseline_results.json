@@ -1,0 +1,15 @@
+{
+  "model": "llama-3.3-70b-versatile",
+  "num_episodes": 1,
+  "avg_task_1": 1.0,
+  "avg_task_2": 0.7396,
+  "avg_task_3": 1.0,
+  "avg_overall": 0.9132,
+  "per_episode": [
+    {
+      "task_1": 1.0,
+      "task_2": 0.7396,
+      "task_3": 1.0
+    }
+  ]
+}

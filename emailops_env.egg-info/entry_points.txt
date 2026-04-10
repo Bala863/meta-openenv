@@ -1,0 +1,2 @@
+[console_scripts]
+emailops-server = emailops_env.server.app:main
