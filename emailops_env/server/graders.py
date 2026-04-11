@@ -1,6 +1,6 @@
 """
 EmailOps-Env: Deterministic grading functions for all three tasks.
-Each grader returns a score between 0.0 and 1.0 with detailed feedback.
+Each grader returns a score strictly between 0.01 and 0.99 with detailed feedback.
 """
 
 import re
@@ -58,22 +58,16 @@ INTENT_SIMILARITY = {
 def grade_intent(predicted: str, ground_truth: str) -> tuple[float, str]:
     """
     Grade intent classification.
-    Returns (score, feedback) where score is 0.0–1.0.
-
-    Scoring:
-    - Exact match: 1.0
-    - Related intent (partial credit): 0.2–0.4
-    - Invalid intent: 0.0
-    - Wrong intent: 0.0
+    Returns (score, feedback) where score is strictly 0.01–0.99.
     """
     predicted = _normalize(predicted)
     ground_truth_norm = _normalize(ground_truth)
 
     if predicted not in VALID_INTENTS:
-        return 0.0, f"Invalid intent '{predicted}'. Valid intents: {sorted(VALID_INTENTS)}"
+        return 0.01, f"Invalid intent '{predicted}'. Valid intents: {sorted(VALID_INTENTS)}"
 
     if predicted == ground_truth_norm:
-        return 1.0, f"Correct! Intent '{predicted}' matches exactly."
+        return 0.99, f"Correct! Intent '{predicted}' matches exactly."
 
     # Check for partial credit
     pair = (predicted, ground_truth_norm)
@@ -84,7 +78,7 @@ def grade_intent(predicted: str, ground_truth: str) -> tuple[float, str]:
             f"intent '{ground_truth}', but not exact."
         )
 
-    return 0.0, f"Incorrect. Predicted '{predicted}', expected '{ground_truth}'."
+    return 0.01, f"Incorrect. Predicted '{predicted}', expected '{ground_truth}'."
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -105,9 +99,7 @@ EXTRACTION_FIELDS = [
 def grade_extraction(predicted: dict, ground_truth: dict) -> tuple[float, str]:
     """
     Grade information extraction across all fields.
-    Returns (score, feedback) where score is 0.0–1.0.
-
-    Each field has a weight, and similarity is computed per-field.
+    Returns (score, feedback) where score is strictly 0.01–0.99.
     """
     total_score = 0.0
     feedback_parts = []
@@ -117,12 +109,11 @@ def grade_extraction(predicted: dict, ground_truth: dict) -> tuple[float, str]:
         gt_val = str(ground_truth.get(field, "")).strip()
 
         if not gt_val:
-            # Ground truth is empty — give full credit if predicted is also empty,
-            # partial credit otherwise (no penalty for extracting something reasonable)
+            # Ground truth is empty
             if not pred_val:
                 field_score = 1.0
             else:
-                field_score = 0.8  # Slight deduction for hallucinating a value
+                field_score = 0.8
             total_score += field_score * weight
             feedback_parts.append(f"  {field}: {field_score:.2f} (gt empty)")
             continue
@@ -161,7 +152,6 @@ def grade_extraction(predicted: dict, ground_truth: dict) -> tuple[float, str]:
 
         # For text fields, use similarity
         sim = _similarity(pred_val, gt_val)
-        # Also check if key terms from GT appear in predicted
         gt_words = set(_normalize(gt_val).split())
         pred_words = set(_normalize(pred_val).split())
         keyword_overlap = len(gt_words & pred_words) / max(len(gt_words), 1)
@@ -173,7 +163,9 @@ def grade_extraction(predicted: dict, ground_truth: dict) -> tuple[float, str]:
             f"  {field}: {field_score:.2f} (similarity={sim:.2f}, keyword_overlap={keyword_overlap:.2f})"
         )
 
-    total_score = round(min(total_score, 1.0), 4)
+    # Restrict total_score strictly to (0, 1) bounds
+    total_score = max(0.01, min(total_score, 0.99))
+    total_score = round(total_score, 4)
     feedback = "Extraction scores by field:\n" + "\n".join(feedback_parts)
     feedback += f"\n  TOTAL: {total_score:.4f}"
     return total_score, feedback
@@ -183,7 +175,6 @@ def grade_extraction(predicted: dict, ground_truth: dict) -> tuple[float, str]:
 # Task 3: Response Generation Grader
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Unsafe / prohibited patterns in responses
 UNSAFE_PATTERNS = [
     r"social\s*security\s*(number|#|no\.?)",
     r"credit\s*card\s*(number|#|no\.?|full)",
@@ -196,17 +187,10 @@ UNSAFE_PATTERNS = [
 def grade_response(response: str, ground_truth: dict, email: dict) -> tuple[float, str]:
     """
     Grade a generated email response.
-    Returns (score, feedback) where score is 0.0–1.0.
-
-    Criteria (weights):
-    - Relevance (0.25): Response addresses the email's topic
-    - Completeness (0.25): Contains required keywords/info
-    - Professionalism (0.20): Proper tone, formatting
-    - Safety (0.15): No unsafe/prohibited content
-    - Accuracy (0.15): No contradictions, correct details
+    Returns (score, feedback) where score is strictly 0.01–0.99.
     """
     if not response or not response.strip():
-        return 0.0, "Empty response."
+        return 0.01, "Empty response."
 
     response_lower = _normalize(response)
     feedback_parts = []
@@ -293,7 +277,10 @@ def grade_response(response: str, ground_truth: dict, email: dict) -> tuple[floa
         + 0.15 * safety_score
         + 0.15 * accuracy_score
     )
-    final_score = round(min(max(final_score, 0.0), 1.0), 4)
+    
+    # Restrict final_score strictly to (0, 1) bounds
+    final_score = max(0.01, min(final_score, 0.99))
+    final_score = round(final_score, 4)
 
     feedback = "Response grading breakdown:\n" + "\n".join(feedback_parts)
     feedback += f"\n  FINAL SCORE: {final_score:.4f}"
