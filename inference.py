@@ -175,10 +175,7 @@ async def main() -> None:
     score = 0.0
     success = False
 
-    log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
-
     try:
-        # Start the episode
         obs = env.reset()
         
         for step in range(1, MAX_STEPS + 1):
@@ -188,6 +185,10 @@ async def main() -> None:
             error = None
             action_log_str = ""
             action_obj = EmailAction()
+            
+            # Let the OpenEnv validator know we are starting a specific task evaluation
+            current_task_name = obs.task_name
+            log_start(task=current_task_name, env=BENCHMARK, model=MODEL_NAME)
             
             try:
                 if obs.task_id == 1:
@@ -223,31 +224,19 @@ async def main() -> None:
 
             # Step the environment
             step_res = env.step(action_obj)
-            obs = step_res["observation"]
+            next_obs = step_res["observation"]
             reward = step_res["reward"]
-            done = step_res["done"]
             
-            rewards.append(reward)
-            steps_taken = step
+            # Log as a distinct 1-step episode for the validator
+            log_step(step=1, action=action_log_str, reward=reward, done=True, error=error)
             
-            log_step(step=step, action=action_log_str, reward=reward, done=done, error=error)
+            step_success = reward >= SUCCESS_SCORE_THRESHOLD
+            log_end(success=step_success, steps=1, rewards=[reward])
             
-            if done:
-                break
-
-        # Calculate final normalized score
-        state = env.state()
-        if state:
-            score = state.total_score # total_score is already normalized 0.0 - 1.0 by the environment
-        else:
-            score = sum(rewards) / len(rewards) if rewards else 0.0
-            
-        success = score >= SUCCESS_SCORE_THRESHOLD
+            obs = next_obs
 
     except Exception as general_error:
         print(f"[DEBUG] Execution error: {general_error}", flush=True)
-    finally:
-        log_end(success=success, steps=steps_taken, rewards=rewards)
 
 
 if __name__ == "__main__":
